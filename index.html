@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bean &amp; Brew — a barista game</title>
+<meta name="description" content="Bean &amp; Brew: a browser barista game. Grind, pull, steam and serve before your customers walk out.">
+<meta name="theme-color" content="#17110d">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9749;</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">☕</span><span class="brand-name">Bean &amp; Brew</span></div>
+
+    <div class="stats">
+      <div class="stat"><span class="k">Day</span><span class="v" id="statDay">1</span></div>
+      <div class="stat"><span class="k">Earned</span><span class="v" id="statEarned">$0</span></div>
+      <div class="stat"><span class="k">Rent</span><span class="v" id="statRent">$12</span></div>
+      <div class="stat"><span class="k">Till</span><span class="v" id="statCash">$0</span></div>
+      <div class="stat stat-streak" id="statStreakWrap" hidden><span class="k">Streak</span><span class="v" id="statStreak">🔥 ×1.0</span></div>
+      <div class="stat stat-rep">
+        <span class="k">Reputation</span>
+        <span class="repbar"><i id="repFill"></i></span>
+      </div>
+    </div>
+
+    <button id="btnSound" class="icon-btn" type="button" aria-label="Toggle sound">🔊</button>
+  </header>
+
+  <main class="board">
+
+    <!-- ─── queue ─────────────────────────────────────────── -->
+    <section class="col col-queue">
+      <h2 class="col-title"><span>Queue</span><span class="col-note" id="queueNote">0 left today</span></h2>
+      <div class="queue" id="queue"></div>
+      <p class="queue-empty" id="queueEmpty">The shop is quiet…</p>
+    </section>
+
+    <!-- ─── station ───────────────────────────────────────── -->
+    <section class="col col-station">
+      <div class="station" id="station">
+        <ol class="steprail" id="steprail">
+          <li data-s="grind"><span class="sr-n">1</span><span class="sr-t">Grind</span></li>
+          <li data-s="extract"><span class="sr-n">2</span><span class="sr-t">Shot</span></li>
+          <li data-s="steam"><span class="sr-n">3</span><span class="sr-t">Steam</span></li>
+          <li data-s="finish"><span class="sr-n">4</span><span class="sr-t">Serve</span></li>
+        </ol>
+
+        <div class="panel panel-idle" id="panelIdle">
+          <p class="idle-icon">🫘</p>
+          <p class="idle-text">Waiting for the next customer…</p>
+        </div>
+
+        <!-- grind -->
+        <div class="panel" id="panelGrind" hidden>
+          <h3 class="panel-title">1 · Grind &amp; dose</h3>
+          <p class="panel-hint">Hold to grind. Release inside the window.</p>
+          <div class="track track-tall" id="grindTrack">
+            <div class="band" id="grindBand"></div>
+            <div class="fill" id="grindFill"></div>
+            <div class="needle" id="grindNeedle"></div>
+          </div>
+          <div class="readout"><span class="readout-v" id="grindDose">0.0</span><span class="readout-u">g</span></div>
+          <button class="big-btn" id="btnGrind" type="button"><span class="big-btn-k">HOLD</span><span class="big-btn-l">Grind</span></button>
+        </div>
+
+        <!-- extract -->
+        <div class="panel" id="panelExtract" hidden>
+          <h3 class="panel-title">2 · Pull the shot <span class="shot-count" id="shotCount"></span></h3>
+          <p class="panel-hint">Stop the flow in the crema window.</p>
+          <div class="track track-tall" id="extractTrack">
+            <div class="band" id="extractBand"></div>
+            <div class="marker" id="extractMarker"></div>
+          </div>
+          <div class="shot-dots" id="shotDots"></div>
+          <button class="big-btn" id="btnExtract" type="button"><span class="big-btn-k">TAP</span><span class="big-btn-l">Stop</span></button>
+        </div>
+
+        <!-- steam -->
+        <div class="panel" id="panelSteam" hidden>
+          <h3 class="panel-title">3 · Steam the milk</h3>
+          <p class="panel-hint" id="steamHint">Keep the wand in the drifting sweet spot.</p>
+          <div class="track track-tall track-steam" id="steamTrack">
+            <div class="band band-steam" id="steamBand"></div>
+            <div class="wand" id="steamWand"><span class="wand-tip">🥛</span></div>
+          </div>
+          <div class="timerbar"><i id="steamTimer"></i></div>
+          <button class="big-btn" id="btnSteam" type="button"><span class="big-btn-k">MOVE</span><span class="big-btn-l">Drag or ← →</span></button>
+        </div>
+
+        <!-- finish -->
+        <div class="panel" id="panelExtras" hidden>
+          <h3 class="panel-title">4 · Finish &amp; serve</h3>
+          <p class="panel-hint">Add exactly what the ticket asks for.</p>
+          <div class="extras" id="extras"></div>
+          <button class="big-btn big-btn-go" id="btnServe" type="button"><span class="big-btn-k">SERVE</span><span class="big-btn-l">Space</span></button>
+        </div>
+
+      </div>
+      <div class="toasts" id="toasts"></div>
+    </section>
+
+    <!-- ─── ticket + cup ──────────────────────────────────── -->
+    <section class="col col-order">
+      <div class="ticket" id="ticket" hidden>
+        <div class="ticket-head">
+          <span class="ticket-for" id="ticketFor">for —</span>
+          <span class="ticket-price" id="ticketPrice">$0.00</span>
+        </div>
+        <h3 class="ticket-drink" id="ticketDrink">—</h3>
+        <ul class="ticket-steps" id="ticketSteps"></ul>
+        <button class="bin-btn" id="btnBin" type="button">🗑 Bin it &amp; restart</button>
+      </div>
+
+      <div class="cupwrap">
+        <div class="cup">
+          <div class="cup-body">
+            <div class="cup-liquid" id="cupLiquid">
+              <div class="lyr lyr-espresso" id="lyrEspresso"></div>
+              <div class="lyr lyr-milk" id="lyrMilk"></div>
+              <div class="lyr lyr-foam" id="lyrFoam"></div>
+            </div>
+            <div class="cup-ice" id="cupIce" hidden>🧊🧊</div>
+            <div class="cup-gloss"></div>
+          </div>
+          <div class="cup-handle"></div>
+        </div>
+        <div class="saucer"></div>
+        <p class="cup-caption" id="cupCaption">empty cup</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ─── overlays ────────────────────────────────────────── -->
+<div class="overlay" id="overlay">
+
+  <div class="sheet" id="sheetMenu">
+    <p class="sheet-kicker">a browser barista game</p>
+    <h1 class="sheet-title">Bean <span>&amp;</span> Brew</h1>
+    <p class="sheet-lede">Grind, pull, steam, serve. Make rent every day or hand back the apron.</p>
+    <ul class="rules">
+      <li><b>Hold</b> to grind — let go inside the dose window.</li>
+      <li><b>Tap</b> to stop each espresso shot on the crema.</li>
+      <li><b>Drag</b> (or ← →) to hold the steam wand in the sweet spot.</li>
+      <li>Tick exactly the extras the ticket names, then <b>Serve</b>.</li>
+      <li>Space or Enter works for whatever the station wants.</li>
+    </ul>
+    <p class="best" id="bestLine" hidden></p>
+    <button class="cta" id="btnStart" type="button">Open the shop</button>
+  </div>
+
+  <div class="sheet" id="sheetDay" hidden>
+    <p class="sheet-kicker" id="dayKicker">closing time</p>
+    <h1 class="sheet-title sheet-title-sm" id="dayTitle">Day 1 done</h1>
+    <div class="books" id="books"></div>
+    <h2 class="shop-title">Upgrades</h2>
+    <div class="shop" id="shop"></div>
+    <button class="cta" id="btnNextDay" type="button">Start day 2</button>
+  </div>
+
+  <div class="sheet" id="sheetOver" hidden>
+    <p class="sheet-kicker">last orders</p>
+    <h1 class="sheet-title sheet-title-sm" id="overTitle">Shop closed</h1>
+    <p class="sheet-lede" id="overReason"></p>
+    <div class="books" id="overBooks"></div>
+    <button class="cta" id="btnRetry" type="button">Try again</button>
+  </div>
+
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
