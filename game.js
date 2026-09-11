@@ -1,5 +1,7 @@
-/* Bean & Brew — a barista game. Vanilla JS, no dependencies. */
-'use strict';
+/* Bean & Brew — a 3D barista game.
+   Game rules live here; the café itself is drawn by cafe3d.js. */
+import { Cafe3D } from './cafe3d.js';
+
 (function () {
 
   /* ── helpers ──────────────────────────────────────────── */
@@ -148,6 +150,7 @@
     build: null,
     mini: null,
     keys: { left: false, right: false },
+    serveTick: 0,
     nextId: 1
   };
 
@@ -214,8 +217,8 @@
     steprail: $('steprail'),
     ticket: $('ticket'), ticketFor: $('ticketFor'), ticketPrice: $('ticketPrice'),
     ticketDrink: $('ticketDrink'), ticketSteps: $('ticketSteps'),
-    lyrEspresso: $('lyrEspresso'), lyrMilk: $('lyrMilk'), lyrFoam: $('lyrFoam'),
-    cupIce: $('cupIce'), cupCaption: $('cupCaption'), cupLiquid: $('cupLiquid'),
+    stage: $('stage'), scene: $('scene'), stageCaption: $('stageCaption'),
+    stageFallback: $('stageFallback'), ticketIdle: $('ticketIdle'),
     toasts: $('toasts'),
     overlay: $('overlay'), sheetMenu: $('sheetMenu'), sheetDay: $('sheetDay'), sheetOver: $('sheetOver'),
     btnStart: $('btnStart'), btnNextDay: $('btnNextDay'), btnRetry: $('btnRetry'),
@@ -399,6 +402,7 @@
 
     c.leaving = true;
     c.leaveTimer = 0.26;
+    state.serveTick++;
     state.queueVersion++;
 
     state.build = null;
@@ -430,8 +434,13 @@
   /* ── update ───────────────────────────────────────────── */
 
   function update(dt) {
-    if (state.phase !== 'playing') return;
+    if (state.phase === 'playing') updatePlay(dt);
+    // Every per-frame integrator the scene owns advances here, on the fixed
+    // step — not in the render path — so N driven steps equal N real frames.
+    Cafe3D.update(dt, view3d());
+  }
 
+  function updatePlay(dt) {
     // spawning
     if (state.spawned < state.dayCustomers) {
       state.spawnTimer -= dt;
@@ -756,7 +765,8 @@
 
   function renderTicket() {
     const b = state.build;
-    if (!b) { dom.ticket.hidden = true; return; }
+    if (!b) { dom.ticket.hidden = true; dom.ticketIdle.hidden = false; return; }
+    dom.ticketIdle.hidden = true;
     const c = state.queue.find((x) => x.id === b.customer);
     dom.ticket.hidden = false;
     dom.ticketFor.textContent = 'for ' + (c ? c.name : '—');
@@ -780,43 +790,55 @@
     ).join('');
   }
 
+  /* ── what the 3D café is told ─────────────────────────── */
+
+  // Cup contents as fractions of the inner height, bottom layer first.
+  function liquidOf(b) {
+    if (!b) return { espresso: 0, milk: 0, foam: 0, water: false };
+    let esp = b.shots.length * (b.drink.shots > 1 ? 0.15 : 0.22);
+    let milk = 0, foam = 0, water = false;
+    if (b.steam != null) {
+      milk = b.drink.milk === 'thick' ? 0.40 : b.drink.milk === 'micro' ? 0.52 : 0.48;
+      foam = b.drink.milk === 'thick' ? 0.26 : b.drink.milk === 'micro' ? 0.10 : 0.16;
+    } else if (b.extras.has('milk')) {
+      milk = 0.48;
+    } else if (b.extras.has('water')) {
+      esp += 0.40; water = true;
+    }
+    return { espresso: esp, milk: milk, foam: foam, water: water };
+  }
+
+  function view3d() {
+    const b = state.build, m = state.mini;
+    const c = frontCustomer();
+    const steaming = !!(m && m.kind === 'steam');
+    return {
+      phase: state.phase,
+      step: state.step,
+      grinding: !!(m && m.kind === 'grind' && m.holding),
+      grindV: m && m.kind === 'grind' ? m.v : 0,
+      dosed: !!(b && b.grind != null),
+      wand: steaming ? m.wand : 0.5,
+      steamT: steaming ? m.t : -1,
+      steamOn: steaming && m.t >= 0 && Math.abs(m.wand - steamCentre(m)) <= m.p.half,
+      liquid: liquidOf(b),
+      tint: b ? (b.extras.has('choc') ? 'choc' : b.extras.has('caramel') ? 'caramel'
+        : b.extras.has('cinn') ? 'cinn' : null) : null,
+      ice: b ? b.extras.has('ice') : false,
+      serveTick: state.serveTick,
+      customer: c ? { id: c.id, patience: clamp(c.patience / c.maxPatience, 0, 1) } : null
+    };
+  }
+
   function renderCup() {
     const b = state.build;
-    if (!b) {
-      dom.lyrEspresso.style.height = '0%';
-      dom.lyrMilk.style.height = '0%';
-      dom.lyrFoam.style.height = '0%';
-      dom.cupIce.hidden = true;
-      dom.cupLiquid.style.filter = '';
-      dom.cupCaption.textContent = 'clean cup, ready';
-      return;
-    }
-    const esp = b.shots.length * (b.drink.shots > 1 ? 15 : 22);
-    const hasColdMilk = b.extras.has('milk');
-    const water = b.extras.has('water');
-    let milk = 0, foam = 0;
-    if (b.steam != null) {
-      milk = b.drink.milk === 'thick' ? 40 : b.drink.milk === 'micro' ? 52 : 48;
-      foam = b.drink.milk === 'thick' ? 26 : b.drink.milk === 'micro' ? 10 : 16;
-    } else if (hasColdMilk) milk = 48;
-    else if (water) milk = 44;
-    dom.lyrEspresso.style.height = esp + '%';
-    dom.lyrMilk.style.height = milk + '%';
-    dom.lyrFoam.style.height = foam + '%';
-    dom.lyrMilk.style.background = water && b.steam == null
-      ? 'linear-gradient(180deg,#a9714133,#8a5a2f55)'
-      : 'linear-gradient(180deg,#f2e3cd,#e2cdae)';
-    dom.cupIce.hidden = !b.extras.has('ice');
-    const tint = b.extras.has('choc') ? 'sepia(.35) saturate(1.3) brightness(.92)'
-      : b.extras.has('caramel') ? 'sepia(.25) saturate(1.2)'
-      : b.extras.has('cinn') ? 'sepia(.18)' : '';
-    dom.cupLiquid.style.filter = tint;
+    if (!b) { dom.stageCaption.textContent = state.phase === 'playing' ? 'Clean cup, ready.' : ''; return; }
     const bits = [];
     if (b.grind != null) bits.push('dosed');
     if (b.shots.length) bits.push(b.shots.length + ' shot' + (b.shots.length > 1 ? 's' : ''));
     if (b.steam != null) bits.push('steamed');
     if (b.extras.size) bits.push(b.extras.size + ' extra' + (b.extras.size > 1 ? 's' : ''));
-    dom.cupCaption.textContent = bits.length ? bits.join(' · ') : 'building ' + b.drink.name.toLowerCase() + '…';
+    dom.stageCaption.textContent = b.drink.name + (bits.length ? ' — ' + bits.join(' · ') : ' — empty cup');
   }
 
   function renderAll() {
@@ -824,6 +846,7 @@
   }
   function render() {
     renderStats(); renderQueue(); renderMini();
+    Cafe3D.draw();
   }
 
   function toast(text, cls) {
@@ -940,6 +963,24 @@
   }
   requestAnimationFrame(frame);
 
+  /* ── boot the café ────────────────────────────────────── */
+
+  const scene3d = Cafe3D.init(dom.scene);
+  if (!scene3d) {
+    dom.scene.hidden = true;
+    dom.stageFallback.hidden = false;
+  } else {
+    const fit = () => {
+      const r = dom.stage.getBoundingClientRect();
+      // A hidden pane measures 0. Size from a clamped floor instead, so the
+      // world is never built from a collapsed box.
+      Cafe3D.resize(r.width, r.height);
+    };
+    fit();
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(dom.stage);
+    else window.addEventListener('resize', fit);
+  }
+
   /* ── boot ─────────────────────────────────────────────── */
 
   if (Store.get('bestDay') > 0) {
@@ -955,7 +996,14 @@
     window.__barista = {
       state: state,
       seed(n) { rngState = n >>> 0; },
-      step(ms) { advance(ms / 1000); renderAll(); },
+      // Drives the whole frame, not just the simulation: the 3D draw and
+      // every per-frame integrator have to advance with it or the picture
+      // shows a state the running app would never reach.
+      step(ms) { advance(ms / 1000); renderAll(); render(); },
+      // Same simulation, no GPU work — for bulk runs where the picture is not
+      // what is being measured. Scene interpolation still advances inside
+      // advance(), so the two agree on state, only not on pixels.
+      sim(ms) { advance(ms / 1000); },
       down: primaryDown,
       up: primaryUp,
       setWand(x) { if (state.mini && state.mini.kind === 'steam') { state.mini.target = x; state.mini.wand = x; } },
@@ -963,6 +1011,11 @@
       params() { return state.mini ? state.mini.p : null; },
       value() { return state.mini ? state.mini.v : null; },
       toggle: toggleExtra,
+      view: view3d,
+      scene: Cafe3D,
+      // Reads the drawing buffer inside the drawing task: answers "did the GPU
+      // make this frame" without depending on the compositor ever showing it.
+      probe: () => Cafe3D.probe(),
       serve: serve,
       newGame: newGame,
       nextDay: nextDay,

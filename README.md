@@ -1,11 +1,17 @@
 # ☕ Bean & Brew
 
-A browser barista game. Grind, pull, steam and serve — and make rent every day
-or hand back the apron.
+A **3D** browser barista game. Grind, pull, steam and serve — and make rent
+every day or hand back the apron.
 
 **▶ Play it: https://ctbot000.github.io/barista-game/**
 
-No build step, no dependencies, no tracking. Three files and a `<script>` tag.
+You work a real espresso bar rendered in WebGL: the grinder doses a portafilter
+that you then lock into the group head, espresso streams into the cup, the
+pitcher rises to the steam wand, and the finished drink slides across the
+counter to whoever ordered it. The camera moves to whichever station you're
+working at.
+
+No build step and no network calls — Three.js is vendored into `vendor/`.
 
 ---
 
@@ -26,6 +32,18 @@ and the tip. Serve five-star cups back to back and a **streak multiplier**
 builds on your tips, up to ×2 — one sloppy cup and it's gone.
 
 At closing time you pay the rent. Miss it and the shop closes.
+
+## The café
+
+The scene is built from primitives at a consistent 1 unit = 10 cm, so the cup,
+the machine and the person waiting for it are all the size they should be
+relative to each other. Each station has its own camera, and the wide shots keep
+the customer in frame at every stage aspect ratio.
+
+The cup is a lathed shell rather than a capped cylinder, so it is genuinely
+hollow, and the espresso / milk / foam layers are stacked meshes inside it that
+grow as you build the drink. Steam, coffee grounds and the espresso stream are
+pooled meshes recycled on the simulation clock.
 
 ## Controls
 
@@ -50,7 +68,8 @@ gets around.
 
 ## Running it locally
 
-Any static server will do:
+It loads as an ES module, so it needs to be served rather than opened as a
+`file://` URL. Any static server will do:
 
 ```bash
 python3 -m http.server 8000
@@ -60,17 +79,25 @@ Then open <http://localhost:8000>.
 
 ## Notes on the build
 
-- Vanilla HTML/CSS/JS. No framework, no bundler, no external requests — the
+- Vanilla HTML/CSS/JS plus Three.js, which is vendored rather than pulled from a
+  CDN, so the page makes no network calls at all. No framework, no bundler; the
   favicon is an inline SVG data URI and the fonts are system stacks.
+- Rules live in `game.js`, the café in `cafe3d.js`. The game hands the scene a
+  small view model each tick and knows nothing else about rendering.
+- Every metal in the scene is lit by a procedural environment map generated from
+  a 64×32 canvas gradient. Without one, a high-metalness material has nothing to
+  reflect and renders near-black no matter how bright the lamps are.
 - The simulation runs on a **fixed 120 Hz timestep** with an accumulator, and
   every animation lifetime is wall-clock rather than frame-counted, so a
   backgrounded tab doesn't freeze anything mid-flight.
 - Progress is held in memory and written through to `localStorage`, so blocked
   storage costs you persistence across reloads and nothing else.
 - Adding `?test=1` to the URL exposes `window.__barista` — a deterministic
-  driver with a seedable RNG and a `step(ms)` function that advances the
-  simulation without waiting on animation frames. It's what the balance numbers
-  below were measured with. Without the flag it isn't defined.
+  driver with a seedable RNG and a `step(ms)` that runs the *whole* frame, the
+  3D draw and every per-frame integrator included, so a scripted run reaches the
+  same state a real one would. `probe()` reads the drawing buffer inside the
+  drawing task, which tells you the GPU produced a frame independently of
+  whether anything ever composited it. Without the flag neither is defined.
 
 ## Balance
 
